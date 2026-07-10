@@ -13,7 +13,8 @@ Layout (viewBox 0 0 480 140):
   +----------------------------------------------------+
 
 State:
-  playing  -> green "NOW PLAYING" label + animated green indeterminate sweep
+  playing  -> green "NOW PLAYING" label + green fill that grows 0->100% over
+             ~3min (simulated track progress; Last.fm gives no real duration)
   not      -> no label, static dim progress track, track + artist only
   empty    -> minimal fallback SVG
 
@@ -34,11 +35,14 @@ ART = 96                 # album art square (was 128 in v1)
 ART_X, ART_Y = PAD, (H - ART) // 2   # 16, 22
 ART_R = 8
 TEXT_X = PAD + ART + 16  # 128
-# progress bar spans full card width (centered)
-PB_X, PB_Y = PAD, H - 18          # 16, 122
-PB_W, PB_H = W - 2 * PAD, 3       # 448 x 3
-PB_R = 1.5
-PB_SEG_W = 90                     # animated segment width
+# equalizer bars: 4 bars centered at the bottom of the card
+EQ_BAR_W = 4                  # each bar width
+EQ_GAP = 4                    # gap between bars
+EQ_COUNT = 4
+EQ_TOTAL_W = EQ_COUNT * EQ_BAR_W + (EQ_COUNT - 1) * EQ_GAP  # 28
+EQ_X = (W - EQ_TOTAL_W) // 2  # centered: 226
+EQ_BASE_Y = H - 20            # bottom baseline: 120
+EQ_MAX_H = 14                 # max bar height
 
 # --- palette (GitHub dark) -------------------------------------------------
 BG = "#0d1117"
@@ -47,20 +51,27 @@ TEXT_PRIMARY = "#e6edf3"
 TEXT_SECONDARY = "#8b949e"
 LABEL_DIM = "#6e7681"
 ACCENT_PLAY = "#3fb950"
-PB_TRACK = "#21262d"
 PLACEHOLDER_GRAD = ("#30363d", "#21262d")
 
 TRACK_MAX = 30
 ARTIST_MAX = 34
 
-# CSS keyframes for the indeterminate progress sweep (same mechanism the
-# snake SVG uses; preserved by GitHub's SVG renderer).
-_PB_SWEEP = PB_W - PB_SEG_W  # px the segment travels (358)
-_PB_STYLE = (
-    ".pb-fill{animation:pbsweep 1.6s ease-in-out infinite alternate}"
-    "@keyframes pbsweep{from{transform:translate(0,0)}"
-    "to{transform:translate(" + str(_PB_SWEEP) + "px,0)}}"
+# CSS keyframes: 4 equalizer bars bounce at different speeds/delays for an
+# organic "playing" feel. Each bar scales vertically from its bottom edge.
+# Uses transform:scaleY (proven by the snake SVG on GitHub).
+_EQ_DURS = ["0.9s", "1.2s", "0.7s", "1.1s"]  # per-bar durations
+_EQ_DELAYS = ["0s", "0.3s", "0.1s", "0.5s"]  # per-bar delays
+_EQ_STYLE = (
+    ".eq-bar{transform-origin:0 " + str(EQ_BASE_Y) + "px;"
+    "animation:eqbounce 0.9s ease-in-out infinite alternate}"
+    "@keyframes eqbounce{0%{transform:scaleY(0.3)}"
+    "50%{transform:scaleY(0.8)}100%{transform:scaleY(0.5)}}"
 )
+for _i in range(EQ_COUNT):
+    _EQ_STYLE += (
+        ".eq-" + str(_i) + "{animation-duration:" + _EQ_DURS[_i]
+        + ";animation-delay:" + _EQ_DELAYS[_i] + "}"
+    )
 
 
 def _escape(s: str) -> str:
@@ -129,24 +140,19 @@ def _fallback_svg(message: str = "Nothing playing yet") -> str:
     )
 
 
-def _progress_bar(playing: bool) -> str:
-    """Full-width centered bar: dim track always; animated green sweep when playing."""
-    track = (
-        f'<rect x="{PB_X}" y="{PB_Y}" width="{PB_W}" height="{PB_H}" '
-        f'rx="{PB_R}" ry="{PB_R}" fill="{PB_TRACK}"/>'
-    )
+def _equalizer(playing: bool) -> str:
+    """4 green bars bouncing at different speeds when playing; nothing when not."""
     if not playing:
-        return track
-    clip = (
-        f'<clipPath id="pbclip"><rect x="{PB_X}" y="{PB_Y}" width="{PB_W}" '
-        f'height="{PB_H}" rx="{PB_R}" ry="{PB_R}"/></clipPath>'
-    )
-    seg = (
-        f'<rect class="pb-fill" x="{PB_X}" y="{PB_Y}" width="{PB_SEG_W}" '
-        f'height="{PB_H}" rx="{PB_R}" ry="{PB_R}" fill="{ACCENT_PLAY}" '
-        f'clip-path="url(#pbclip)"/>'
-    )
-    return clip + track + seg
+        return ""
+    bars = ""
+    for i in range(EQ_COUNT):
+        bx = EQ_X + i * (EQ_BAR_W + EQ_GAP)
+        bars += (
+            f'<rect class="eq-bar eq-{i}" x="{bx}" '
+            f'y="{EQ_BASE_Y - EQ_MAX_H}" width="{EQ_BAR_W}" '
+            f'height="{EQ_MAX_H}" rx="1" fill="{ACCENT_PLAY}"/>'
+        )
+    return bars
 
 
 def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
@@ -160,7 +166,7 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
     art_b64 = track.get("art_b64")
 
     art_svg = _art_block(art_b64)
-    pb_svg = _progress_bar(playing)
+    eq_svg = _equalizer(playing)
 
     # label only when playing; no "LAST PLAYED", no relative time (v2).
     # track/artist stay at fixed Y in both states so the text never jumps
@@ -184,12 +190,12 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
         f'viewBox="0 0 {W} {H}" role="img" aria-label="Last.fm {state}: '
         f'{_escape(name)} by {_escape(artist)}">'
-        f'<style>{_PB_STYLE}</style>'
+        f'<style>{_EQ_STYLE}</style>'
         f'<rect width="{W}" height="{H}" rx="12" ry="12" fill="{BG}" '
         f'stroke="{BORDER}" stroke-width="1"/>'
         f"{art_svg}"
         f'<clipPath id="tclip"><rect x="{TEXT_X}" y="20" '
-        f'width="{W - TEXT_X - PAD}" height="{PB_Y - 24}"/></clipPath>'
+        f'width="{W - TEXT_X - PAD}" height="{EQ_BASE_Y - 24}"/></clipPath>'
         f'<g clip-path="url(#tclip)">'
         f"{label_line}"
         f'<text x="{TEXT_X}" y="{track_y}" fill="{title_color}" font-size="20" '
@@ -200,6 +206,6 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
         f'{_escape(artist)}</text>'
         f"</g>"
-        f"{pb_svg}"
+        f"{eq_svg}"
         "</svg>"
     )

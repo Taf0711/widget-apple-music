@@ -30,28 +30,29 @@ LAST_PLAYED = {
 }
 
 
-def test_now_playing_label_color_and_animated_bar():
+def test_now_playing_label_color_and_equalizer():
     svg = g.render_svg(NOW_PLAYING)
     assert "<svg" in svg and "</svg>" in svg
     assert "NOW PLAYING" in svg
     assert "#3fb950" in svg              # green accent
-    assert 'class="pb-fill"' in svg      # animated sweep segment present
-    assert "ago" not in svg              # no relative time
+    assert 'class="eq-bar' in svg        # equalizer bars present
+    assert "eqbounce" in svg             # bounce keyframes present
+    assert "scaleY" in svg               # scales vertically
+    assert "ago" not in svg             # no relative time
 
 
-def test_last_played_has_no_label_no_time_no_sweep():
+def test_last_played_has_no_label_no_time_no_equalizer():
     svg = g.render_svg(LAST_PLAYED)
-    assert "LAST PLAYED" not in svg      # v2 drops the last-played label
+    assert "LAST PLAYED" not in svg
     assert "NOW PLAYING" not in svg
-    assert "ago" not in svg              # relative time dropped
-    assert 'class="pb-fill"' not in svg  # no animated segment when not playing
+    assert "ago" not in svg
+    assert 'class="eq-bar' not in svg   # no equalizer when not playing
     assert "#8b949e" in svg              # dimmed title color
 
 
-def test_progress_track_always_present():
-    # dim track rect exists in both states
-    assert f'fill="{g.PB_TRACK}"' in g.render_svg(NOW_PLAYING)
-    assert f'fill="{g.PB_TRACK}"' in g.render_svg(LAST_PLAYED)
+def test_equalizer_has_four_bars():
+    svg = g.render_svg(NOW_PLAYING)
+    assert svg.count('class="eq-bar') == g.EQ_COUNT  # exactly 4 bars
 
 
 def test_empty_track_returns_fallback():
@@ -112,4 +113,4 @@ def test_svg_well_formed_root_and_size():
     root = ET.fromstring(svg)
     assert root.tag.endswith("}svg")
     assert root.attrib["width"] == "480"
-    assert root.attrib["height"] == "140"   # v2 is shorter
+    assert root.attrib["height"] == "140"
