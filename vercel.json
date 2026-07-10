@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "api/*.py": {
+      "memory": 128,
+      "maxDuration": 10
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=60, max-age=60" }
+      ]
+    }
+  ]
+}
