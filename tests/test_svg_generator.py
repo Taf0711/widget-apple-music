@@ -1,4 +1,4 @@
-"""Unit tests for lib.svg_generator — no network, pure payload -> SVG checks."""
+"""Unit tests for lib.svg_generator (v2 design) — no network."""
 import sys
 import time
 from pathlib import Path
@@ -7,10 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 import svg_generator as g
 
-# build the XML quote entity from parts so it survives the source round-trip
-QUOT = "&" + "quot;"
+QUOT = "&" + "quot;"  # build the XML quote entity from parts (survives source round-trip)
 
-# ---------- fixtures ----------
 NOW_PLAYING = {
     "name": "Like Water",
     "artist": "Flume",
@@ -32,22 +30,28 @@ LAST_PLAYED = {
 }
 
 
-def test_now_playing_label_and_color():
+def test_now_playing_label_color_and_animated_bar():
     svg = g.render_svg(NOW_PLAYING)
     assert "<svg" in svg and "</svg>" in svg
     assert "NOW PLAYING" in svg
-    assert "#3fb950" in svg  # playing accent
-    # no relative time when currently playing
-    assert "ago" not in svg
+    assert "#3fb950" in svg              # green accent
+    assert 'class="pb-fill"' in svg      # animated sweep segment present
+    assert "ago" not in svg              # no relative time
 
 
-def test_last_played_relative_time_and_dim():
-    t = int(time.time()) - 3 * 60  # 3 min ago
-    track = dict(LAST_PLAYED, played_at=t)
-    svg = g.render_svg(track, now=int(time.time()) + 1)
-    assert "LAST PLAYED" in svg
-    assert "3 min ago" in svg
-    assert "#6e7681" in svg  # dim label color
+def test_last_played_has_no_label_no_time_no_sweep():
+    svg = g.render_svg(LAST_PLAYED)
+    assert "LAST PLAYED" not in svg      # v2 drops the last-played label
+    assert "NOW PLAYING" not in svg
+    assert "ago" not in svg              # relative time dropped
+    assert 'class="pb-fill"' not in svg  # no animated segment when not playing
+    assert "#8b949e" in svg              # dimmed title color
+
+
+def test_progress_track_always_present():
+    # dim track rect exists in both states
+    assert f'fill="{g.PB_TRACK}"' in g.render_svg(NOW_PLAYING)
+    assert f'fill="{g.PB_TRACK}"' in g.render_svg(LAST_PLAYED)
 
 
 def test_empty_track_returns_fallback():
@@ -57,7 +61,7 @@ def test_empty_track_returns_fallback():
 
 
 def test_partial_track_missing_artist_returns_fallback():
-    svg = g.render_svg({"name": "X"})  # no artist
+    svg = g.render_svg({"name": "X"})
     assert "Nothing playing yet" in svg
 
 
@@ -65,7 +69,7 @@ def test_long_names_are_ellipsized():
     long_track = "A" * 60
     long_artist = "B" * 60
     svg = g.render_svg({"name": long_track, "artist": long_artist, "playing": True})
-    assert "\u2026" in svg  # ellipsis present
+    assert "\u2026" in svg
     assert long_track not in svg
     assert long_artist not in svg
 
@@ -73,22 +77,18 @@ def test_long_names_are_ellipsized():
 def test_art_b64_embedded_as_image():
     svg = g.render_svg(LAST_PLAYED)
     assert 'href="data:image/jpeg;base64,QUJD"' in svg
-    assert "url(#artclip)" in svg  # rounded corner clip
+    assert "url(#artclip)" in svg
 
 
 def test_missing_art_shows_placeholder():
     svg = g.render_svg({"name": "T", "artist": "A", "playing": True, "art_b64": None})
-    assert "linearGradient" in svg  # placeholder gradient
+    assert "linearGradient" in svg
     assert "data:image" not in svg
 
 
 def test_xml_special_chars_escaped():
     svg = g.render_svg({"name": "A & B <c>", "artist": 'X "Y"', "playing": True})
-    # html.escape(quote=True) must turn the stray double-quote into the
-    # quote entity so it cannot break out of an SVG attribute.
     assert QUOT in svg
-    # raw double-quote should not appear as a standalone attr-breaker beyond
-    # the ones the generator itself emits (at least the entity is present)
     assert "<" in svg and ">" in svg and "&" in svg
 
 
@@ -105,11 +105,11 @@ def test_relative_time_buckets():
         assert g._relative_time(now - secs, now=now) == expected, secs
 
 
-def test_svg_well_formed_root():
+def test_svg_well_formed_root_and_size():
     import xml.etree.ElementTree as ET
 
     svg = g.render_svg(NOW_PLAYING)
     root = ET.fromstring(svg)
     assert root.tag.endswith("}svg")
     assert root.attrib["width"] == "480"
-    assert root.attrib["height"] == "160"
+    assert root.attrib["height"] == "140"   # v2 is shorter
