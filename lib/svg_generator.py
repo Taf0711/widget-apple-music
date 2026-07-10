@@ -1,21 +1,19 @@
-"""SVG generator for the Last.fm now-playing widget (v2 design).
+"""SVG generator for the Last.fm now-playing widget (compact/embedded design).
 
 Self-contained SVG for embedding in a GitHub profile README via <img>.
 Artwork is base64-embedded (data URI) because <img>-sandboxed SVGs cannot
 make external requests — a CDN <image href> would render blank.
 
-Layout (viewBox 0 0 480 140):
-  +----------------------------------------------------+
-  |  [art 96]   NOW PLAYING                            |
-  |            Track Name (bold)                       |
-  |            Artist                                  |
-  |  [============================================]    |  <- progress bar (full width)
-  +----------------------------------------------------+
+Compact layout (viewBox 0 0 400 84) — dense, badge-like, sits inline:
+  +----------------------------------------------+
+  | [art]  NOW PLAYING                  [eq bars] |
+  |        Track Name (bold)                     |
+  |        Artist                                |
+  +----------------------------------------------+
 
 State:
-  playing  -> green "NOW PLAYING" label + green fill that grows 0->100% over
-             ~3min (simulated track progress; Last.fm gives no real duration)
-  not      -> no label, static dim progress track, track + artist only
+  playing  -> green "NOW PLAYING" label + 4 animated green equalizer bars
+  not      -> no label, no equalizer, dimmed track + artist
   empty    -> minimal fallback SVG
 
 Track dict shape (unchanged): name, artist, album, art_url, art_b64, playing,
@@ -28,21 +26,21 @@ import html
 import time
 from typing import Mapping, Optional
 
-# --- layout (viewBox 0 0 480 140) ------------------------------------------
-W, H = 480, 140
-PAD = 16
-ART = 96                 # album art square (was 128 in v1)
-ART_X, ART_Y = PAD, (H - ART) // 2   # 16, 22
-ART_R = 8
-TEXT_X = PAD + ART + 16  # 128
-# equalizer bars: 4 bars centered at the bottom of the card
-EQ_BAR_W = 4                  # each bar width
-EQ_GAP = 4                    # gap between bars
+# --- layout (viewBox 0 0 400 84) — compact/embedded -----------------------
+W, H = 400, 84
+PAD = 10
+ART = 56                          # album art square (was 96)
+ART_X, ART_Y = PAD, (H - ART) // 2   # 10, 14
+ART_R = 6
+TEXT_X = PAD + ART + 12           # 78
+# equalizer bars: 4 bars at the right edge, vertically centered with text
+EQ_BAR_W = 3
+EQ_GAP = 3
 EQ_COUNT = 4
-EQ_TOTAL_W = EQ_COUNT * EQ_BAR_W + (EQ_COUNT - 1) * EQ_GAP  # 28
-EQ_X = (W - EQ_TOTAL_W) // 2  # centered: 226
-EQ_BASE_Y = H - 20            # bottom baseline: 120
-EQ_MAX_H = 14                 # max bar height
+EQ_TOTAL_W = EQ_COUNT * EQ_BAR_W + (EQ_COUNT - 1) * EQ_GAP  # 21
+EQ_X = W - PAD - EQ_TOTAL_W      # 369 (right-aligned)
+EQ_BASE_Y = H - 14               # 70 (bottom baseline)
+EQ_MAX_H = 10
 
 # --- palette (GitHub dark) -------------------------------------------------
 BG = "#0d1117"
@@ -53,8 +51,8 @@ LABEL_DIM = "#6e7681"
 ACCENT_PLAY = "#3fb950"
 PLACEHOLDER_GRAD = ("#30363d", "#21262d")
 
-TRACK_MAX = 30
-ARTIST_MAX = 34
+TRACK_MAX = 28
+ARTIST_MAX = 30
 
 # CSS keyframes: 4 equalizer bars bounce at different speeds/delays for an
 # organic "playing" feel. Each bar scales vertically from its bottom edge.
@@ -104,7 +102,7 @@ def _relative_time(played_at: Optional[int], now: Optional[int] = None) -> str:
 
 
 def _art_block(art_b64: Optional[str]) -> str:
-    """Album art (96px, rounded) or a gradient placeholder with a note glyph."""
+    """Album art (56px, rounded) or a gradient placeholder with a note glyph."""
     if art_b64:
         return (
             f'<clipPath id="artclip"><rect x="{ART_X}" y="{ART_Y}" '
@@ -119,8 +117,8 @@ def _art_block(art_b64: Optional[str]) -> str:
         f'<stop offset="1" stop-color="{PLACEHOLDER_GRAD[1]}"/></linearGradient></defs>'
         f'<rect x="{ART_X}" y="{ART_Y}" width="{ART}" height="{ART}" '
         f'rx="{ART_R}" ry="{ART_R}" fill="url(#artph)"/>'
-        f'<text x="{ART_X + ART // 2}" y="{ART_Y + ART // 2 + 8}" '
-        f'text-anchor="middle" font-size="32" fill="#484f58" '
+        f'<text x="{ART_X + ART // 2}" y="{ART_Y + ART // 2 + 6}" '
+        f'text-anchor="middle" font-size="24" fill="#484f58" '
         'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
         '&#9835;</text>'
     )
@@ -130,10 +128,10 @@ def _fallback_svg(message: str = "Nothing playing yet") -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
         f'viewBox="0 0 {W} {H}" role="img" aria-label="{_escape(message)}">'
-        f'<rect width="{W}" height="{H}" rx="12" ry="12" fill="{BG}" '
+        f'<rect width="{W}" height="{H}" rx="8" ry="8" fill="{BG}" '
         f'stroke="{BORDER}" stroke-width="1"/>'
         f'<text x="{W // 2}" y="{H // 2}" text-anchor="middle" '
-        f'dominant-baseline="middle" fill="{LABEL_DIM}" font-size="14" '
+        f'dominant-baseline="middle" fill="{LABEL_DIM}" font-size="12" '
         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
         f'{_escape(message)}</text>'
         "</svg>"
@@ -170,19 +168,19 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
 
     # label only when playing; no "LAST PLAYED", no relative time (v2).
     # track/artist stay at fixed Y in both states so the text never jumps
-    # when the label appears/disappears; the art is centered at y=70 and the
-    # 2-line block is centered to match.
+    # when the label appears/disappears. Art is centered at y=42; the 2-line
+    # text block is centered to match.
     label_line = ""
     if playing:
         label_line = (
-            f'<text x="{TEXT_X}" y="42" fill="{ACCENT_PLAY}" font-size="10" '
-            f'letter-spacing="1.6" font-weight="600" '
+            f'<text x="{TEXT_X}" y="24" fill="{ACCENT_PLAY}" font-size="8" '
+            f'letter-spacing="1.2" font-weight="600" '
             f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
             'NOW PLAYING</text>'
         )
 
-    track_y = 64
-    artist_y = 86
+    track_y = 42
+    artist_y = 60
     title_color = TEXT_PRIMARY if playing else TEXT_SECONDARY
 
     state = "now playing" if playing else "last played"
@@ -191,18 +189,19 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
         f'viewBox="0 0 {W} {H}" role="img" aria-label="Last.fm {state}: '
         f'{_escape(name)} by {_escape(artist)}">'
         f'<style>{_EQ_STYLE}</style>'
-        f'<rect width="{W}" height="{H}" rx="12" ry="12" fill="{BG}" '
+        f'<rect width="{W}" height="{H}" rx="8" ry="8" fill="{BG}" '
         f'stroke="{BORDER}" stroke-width="1"/>'
         f"{art_svg}"
-        f'<clipPath id="tclip"><rect x="{TEXT_X}" y="20" '
-        f'width="{W - TEXT_X - PAD}" height="{EQ_BASE_Y - 24}"/></clipPath>'
+        # text column clip: leaves room for the equalizer at the right edge
+        f'<clipPath id="tclip"><rect x="{TEXT_X}" y="10" '
+        f'width="{EQ_X - TEXT_X - 6}" height="{H - 20}"/></clipPath>'
         f'<g clip-path="url(#tclip)">'
         f"{label_line}"
-        f'<text x="{TEXT_X}" y="{track_y}" fill="{title_color}" font-size="20" '
+        f'<text x="{TEXT_X}" y="{track_y}" fill="{title_color}" font-size="15" '
         f'font-weight="600" '
         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
         f"{_escape(name)}</text>"
-        f'<text x="{TEXT_X}" y="{artist_y}" fill="{TEXT_SECONDARY}" font-size="14" '
+        f'<text x="{TEXT_X}" y="{artist_y}" fill="{TEXT_SECONDARY}" font-size="11" '
         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
         f'{_escape(artist)}</text>'
         f"</g>"

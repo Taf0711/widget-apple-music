@@ -112,5 +112,5 @@ def test_svg_well_formed_root_and_size():
     svg = g.render_svg(NOW_PLAYING)
     root = ET.fromstring(svg)
     assert root.tag.endswith("}svg")
-    assert root.attrib["width"] == "480"
-    assert root.attrib["height"] == "140"
+    assert root.attrib["width"] == "400"
+    assert root.attrib["height"] == "84"
