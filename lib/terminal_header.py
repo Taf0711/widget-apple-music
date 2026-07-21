@@ -106,7 +106,9 @@ def _filters() -> str:
         "<feGaussianBlur in='SourceGraphic' stdDeviation='0.6'/>"
         "</filter>"
         "<radialGradient id='vignette' cx='50%' cy='48%' r='68%'>"
-        "<stop offset='55%' stop-color='#ffffff' stop-opacity='0'/>"
+        # same color both stops: transparent center -> dark edges.
+        # (a #ffffff center stop interpolates to GRAY in the mid-zone)
+        f"<stop offset='55%' stop-color='{BG}' stop-opacity='0'/>"
         f"<stop offset='100%' stop-color='{BG}' stop-opacity='0.85'/>"
         "</radialGradient>"
         # faint repeating scanline pattern
