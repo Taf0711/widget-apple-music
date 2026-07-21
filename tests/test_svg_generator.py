@@ -41,9 +41,9 @@ def test_now_playing_label_color_and_equalizer():
     assert "ago" not in svg             # no relative time
 
 
-def test_last_played_has_no_label_no_time_no_equalizer():
+def test_last_played_has_label_no_time_no_equalizer():
     svg = g.render_svg(LAST_PLAYED)
-    assert "LAST PLAYED" not in svg
+    assert "LAST PLAYED" in svg        # dimmed label shows state
     assert "NOW PLAYING" not in svg
     assert "ago" not in svg
     assert 'class="eq-bar' not in svg   # no equalizer when not playing

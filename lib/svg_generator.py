@@ -42,17 +42,19 @@ EQ_X = W - PAD - EQ_TOTAL_W      # 369 (right-aligned)
 EQ_BASE_Y = H - 14               # 70 (bottom baseline)
 EQ_MAX_H = 10
 
-# --- palette (GitHub dark) -------------------------------------------------
+# --- palette (GitHub dark, aligned with terminal header) --------------------
 BG = "#0d1117"
 BORDER = "#30363d"
 TEXT_PRIMARY = "#e6edf3"
 TEXT_SECONDARY = "#8b949e"
 LABEL_DIM = "#6e7681"
 ACCENT_PLAY = "#3fb950"
+ACCENT_DIM = "#2ea043"  # dimmer green for 'LAST PLAYED'
 PLACEHOLDER_GRAD = ("#30363d", "#21262d")
+FONT_MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
 
-TRACK_MAX = 28
-ARTIST_MAX = 30
+TRACK_MAX = 26
+ARTIST_MAX = 28
 
 # CSS keyframes: 4 equalizer bars bounce at different speeds/delays for an
 # organic "playing" feel. Each bar scales vertically from its bottom edge.
@@ -119,7 +121,7 @@ def _art_block(art_b64: Optional[str]) -> str:
         f'rx="{ART_R}" ry="{ART_R}" fill="url(#artph)"/>'
         f'<text x="{ART_X + ART // 2}" y="{ART_Y + ART // 2 + 6}" '
         f'text-anchor="middle" font-size="24" fill="#484f58" '
-        'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
+        f'font-family="{FONT_MONO}">'
         '&#9835;</text>'
     )
 
@@ -128,11 +130,11 @@ def _fallback_svg(message: str = "Nothing playing yet") -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
         f'viewBox="0 0 {W} {H}" role="img" aria-label="{_escape(message)}">'
-        f'<rect width="{W}" height="{H}" rx="8" ry="8" fill="{BG}" '
+        f'<rect width="{W}" height="{H}" rx="6" ry="6" fill="{BG}" '
         f'stroke="{BORDER}" stroke-width="1"/>'
         f'<text x="{W // 2}" y="{H // 2}" text-anchor="middle" '
         f'dominant-baseline="middle" fill="{LABEL_DIM}" font-size="12" '
-        f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
+        f'font-family="{FONT_MONO}">'
         f'{_escape(message)}</text>'
         "</svg>"
     )
@@ -175,13 +177,21 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
         label_line = (
             f'<text x="{TEXT_X}" y="24" fill="{ACCENT_PLAY}" font-size="8" '
             f'letter-spacing="1.2" font-weight="600" '
-            f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
+            f'font-family="{FONT_MONO}">'
             'NOW PLAYING</text>'
+        )
+    else:
+        label_line = (
+            f'<text x="{TEXT_X}" y="24" fill="{ACCENT_DIM}" font-size="8" '
+            f'letter-spacing="1.2" font-weight="600" '
+            f'font-family="{FONT_MONO}">'
+            'LAST PLAYED</text>'
         )
 
     track_y = 42
     artist_y = 60
     title_color = TEXT_PRIMARY if playing else TEXT_SECONDARY
+    font_family = FONT_MONO
 
     state = "now playing" if playing else "last played"
     return (
@@ -189,7 +199,7 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
         f'viewBox="0 0 {W} {H}" role="img" aria-label="Last.fm {state}: '
         f'{_escape(name)} by {_escape(artist)}">'
         f'<style>{_EQ_STYLE}</style>'
-        f'<rect width="{W}" height="{H}" rx="8" ry="8" fill="{BG}" '
+        f'<rect width="{W}" height="{H}" rx="6" ry="6" fill="{BG}" '
         f'stroke="{BORDER}" stroke-width="1"/>'
         f"{art_svg}"
         # text column clip: leaves room for the equalizer at the right edge
@@ -197,12 +207,12 @@ def render_svg(track: Optional[Mapping], *, now: Optional[int] = None) -> str:
         f'width="{EQ_X - TEXT_X - 6}" height="{H - 20}"/></clipPath>'
         f'<g clip-path="url(#tclip)">'
         f"{label_line}"
-        f'<text x="{TEXT_X}" y="{track_y}" fill="{title_color}" font-size="15" '
+        f'<text x="{TEXT_X}" y="{track_y}" fill="{title_color}" font-size="13" '
         f'font-weight="600" '
-        f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
+        f'font-family="{font_family}">'
         f"{_escape(name)}</text>"
-        f'<text x="{TEXT_X}" y="{artist_y}" fill="{TEXT_SECONDARY}" font-size="11" '
-        f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
+        f'<text x="{TEXT_X}" y="{artist_y}" fill="{TEXT_SECONDARY}" font-size="10" '
+        f'font-family="{font_family}">'
         f'{_escape(artist)}</text>'
         f"</g>"
         f"{eq_svg}"
